@@ -1,0 +1,267 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+local Window = Rayfield:CreateWindow({
+    Name = "Arise Crossover [BETA] by Navi",
+    Icon = 0,
+    LoadingTitle = "Navi Hub",
+    LoadingSubtitle = "by Navi",
+    Theme = "Default",
+    DisableRayfieldPrompts = false,
+    DisableBuildWarnings = false,
+    ConfigurationSaving = {
+        Enabled = true,
+        FolderName = nil,
+        FileName = "Navi's Hub"
+    },
+    Discord = {
+        Enabled = false,
+        Invite = "noinvitelink",
+        RememberJoins = true
+    },
+    KeySystem = false,
+    KeySettings = {
+        Title = "Untitled",
+        Subtitle = "Key System",
+        Note = "No method of obtaining the key is provided",
+        FileName = "Key",
+        SaveKey = true,
+        GrabKeyFromSite = false,
+        Key = {"Hello"}
+    }
+})
+
+local MainTab = Window:CreateTab("Auto Farm", nil)
+local MainSection = MainTab:CreateSection("Main")
+
+-- Auto Attack Button
+local AutoAttackButton = MainTab:CreateButton({
+    Name = "Auto Attack",
+    Callback = function()
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+        local enemiesFolder = workspace.__Main.__Enemies.Client
+        local bridgeNetEvent = game:GetService("ReplicatedStorage").BridgeNet2.dataRemoteEvent
+
+        local playerDetectionRadius = 10
+        local petDetectionRadius = 10
+
+        local function findNearestNPC(radius)
+            local nearestNPC = nil
+            local nearestDistance = math.huge
+
+            for _, npc in pairs(enemiesFolder:GetChildren()) do
+                if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") then
+                    local npcRootPart = npc.HumanoidRootPart
+                    local distance = (humanoidRootPart.Position - npcRootPart.Position).Magnitude
+
+                    if distance < radius and distance < nearestDistance then
+                        nearestDistance = distance
+                        nearestNPC = npc
+                    end
+                end
+            end
+
+            return nearestNPC
+        end
+
+        local function getTopPets()
+            local inventoryPets = player.leaderstats.Inventory.Pets
+            local petList = {}
+
+            for _, petFolder in ipairs(inventoryPets:GetChildren()) do
+                if petFolder:IsA("Folder") then
+                    local levelAttribute = petFolder:GetAttribute("Level")
+                    if levelAttribute then
+                        table.insert(petList, {
+                            pet = petFolder.Name,
+                            level = levelAttribute
+                        })
+                    end
+                end
+            end
+
+            table.sort(petList, function(a, b)
+                return a.level > b.level
+            end)
+
+            local topPets = {}
+            for i = 1, math.min(4, #petList) do
+                table.insert(topPets, petList[i].pet)
+            end
+
+            return topPets
+        end
+
+        local punchLoopConnection = nil
+        local lastPetTarget = nil
+        local lastPlayerTarget = nil
+
+        local function punchLoop(npcName)
+            if not npcName then return end
+
+            local args = {
+                [1] = {
+                    [1] = {
+                        ["Event"] = "PunchAttack",
+                        ["Enemy"] = npcName
+                    },
+                    [2] = "\4"
+                }
+            }
+
+            if bridgeNetEvent then
+                bridgeNetEvent:FireServer(unpack(args))
+            else
+                warn("BridgeNet2 or dataRemoteEvent not found in ReplicatedStorage.")
+            end
+        end
+
+        local function attackPets(npcName)
+            if not npcName then return end
+
+            local topPets = getTopPets()
+            local petPositions = {
+                ["Dongsoo163c021"] = Vector3.new(563.4175415039062, 27.834564208984375, 171.351318359375),
+                ["Dongsoo82df5bf"] = Vector3.new(558.7167358398438, 27.834562301635742, 173.65542602539062),
+                ["Dongsoo9ce4ea7"] = Vector3.new(553.59765625, 27.83456039428711, 172.55935668945312),
+                ["Dongsoo00de96a"] = Vector3.new(565.68701171875, 27.834566116333008, 166.63372802734375)
+            }
+
+            local petAttackArgs = {
+                [1] = {
+                    [1] = {
+                        ["PetPos"] = {},
+                        ["AttackType"] = "All",
+                        ["Event"] = "Attack",
+                        ["Enemy"] = npcName
+                    },
+                    [2] = "\7"
+                }
+            }
+
+            for _, petName in ipairs(topPets) do
+                if petPositions[petName] then
+                    petAttackArgs[1][1]["PetPos"][petName] = petPositions[petName]
+                end
+            end
+
+            if bridgeNetEvent then
+                coroutine.wrap(function()
+                    bridgeNetEvent:FireServer(unpack(petAttackArgs))
+                end)()
+            else
+                warn("BridgeNet2 or dataRemoteEvent not found in ReplicatedStorage.")
+            end
+        end
+
+        local function checkProximity()
+            local nearestNPCForPlayer = findNearestNPC(playerDetectionRadius)
+            local nearestNPCForPets = findNearestNPC(petDetectionRadius)
+
+            if nearestNPCForPets and nearestNPCForPets.Name ~= lastPetTarget then
+                print("Nearest NPC (Pets): " .. nearestNPCForPets.Name)
+                attackPets(nearestNPCForPets.Name)
+                lastPetTarget = nearestNPCForPets.Name
+            end
+
+            if nearestNPCForPlayer then
+                if nearestNPCForPlayer.Name ~= lastPlayerTarget then
+                    print("Nearest NPC (Player): " .. nearestNPCForPlayer.Name)
+                    lastPlayerTarget = nearestNPCForPlayer.Name;
+                end
+
+                if punchLoopConnection then
+                    punchLoopConnection:Disconnect()
+                end
+                punchLoopConnection = game:GetService("RunService").Heartbeat:Connect(function()
+                    punchLoop(nearestNPCForPlayer.Name)
+                end)
+            elseif punchLoopConnection then
+                punchLoopConnection:Disconnect()
+                punchLoopConnection = nil
+                lastPlayerTarget = nil -- Reset target when out of range
+            end
+        end
+
+        game:GetService("RunService").Heartbeat:Connect(checkProximity)
+    end,
+})
+
+-- Auto Teleport Button
+local AutoTeleportButton = MainTab:CreateButton({
+    Name = "Auto Teleport",
+    Callback = function()
+        -- Script to be placed in a LocalScript inside StarterPlayerScripts
+
+        local player = game.Players.LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+        local enemiesFolder = workspace.__Main.__Enemies.Client
+
+        local tweenInfo = TweenInfo.new(
+            1, -- Time (seconds)
+            Enum.EasingStyle.Linear, -- Easing style
+            Enum.EasingDirection.Out, -- Easing direction
+            0, -- Repeat count
+            false, -- Reverse
+            0 -- Delay time
+        )
+
+        local location1 = CFrame.new(-3353.44214, 29.4616032, 2608.74536) * CFrame.Angles(-0.0138685703, 0, 0)
+        local location2 = CFrame.new(-3315.99878, 29.3932247, 2648.13062) * CFrame.Angles(-0.0138685703, 0, 0)
+
+        local currentTarget = location1
+        local targetNPC = nil
+
+        local function findNPCAtLocation(location)
+            for _, npc in pairs(enemiesFolder:GetChildren()) do
+                if npc:IsA("Model") and npc:FindFirstChild("HumanoidRootPart") then
+                    local npcRootPart = npc.HumanoidRootPart
+                    local distance = (npcRootPart.Position - location.p).Magnitude
+                    if distance < 5 then -- Check if NPC is close to the location
+                        return npc
+                    end
+                end
+            end
+            return nil
+        end
+
+        local function tweenCharacter(targetCFrame)
+            local tween = game:GetService("TweenService"):Create(humanoidRootPart, tweenInfo, {CFrame = targetCFrame})
+            tween:Play()
+        end
+
+        local function checkProximity()
+            if targetNPC and targetNPC.HealthBar.Main.Bar.Amount.Text == "0 HP" then
+                if currentTarget == location1 then
+                    currentTarget = location2
+                else
+                    currentTarget = location1
+                end
+                targetNPC = nil
+            end
+
+            if not targetNPC then
+                targetNPC = findNPCAtLocation(currentTarget)
+                if targetNPC then
+                    tweenCharacter(currentTarget)
+                    print("Tweening to " .. currentTarget.p)
+                end
+            end
+        end
+
+        -- Initial tween to the first location.
+        if humanoidRootPart then
+            tweenCharacter(location1)
+            targetNPC = findNPCAtLocation(location1)
+            print("Initial tween to location 1.")
+        else
+            print("Character not found.")
+        end
+
+        game:GetService("RunService").Heartbeat:Connect(checkProximity)
+    end,
+})
