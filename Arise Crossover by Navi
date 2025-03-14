@@ -1282,8 +1282,6 @@ local function stopLightAdmiral()
     end
 end
 
-Lua
-
 -- Script to be placed in a LocalScript inside StarterPlayerScripts
 
 local player = game.Players.LocalPlayer
